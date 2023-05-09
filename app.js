@@ -1,47 +1,42 @@
-const express = require('express');
-const puppeteer = require('puppeteer');
+from flask import Flask, request, jsonify
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
-const app = express();
+app = Flask(__name__)
 
-app.use(express.urlencoded({ extended: true }));
-app.use(express.json());
+CHROMEDRIVER = '/opt/chrome/chromedriver'
 
-app.post('/scroll', async (req, res) => {
-  const { url } = req.body;
+options = Options()
+options.add_argument('--headless')  
+options.add_argument('--no-sandbox')
+options.add_argument('--disable-dev-shm-usage')
 
-  const browser = await puppeteer.launch({
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
-  });
-  const page = await browser.newPage();
-  await page.goto(url, { waitUntil: 'networkidle2' });
+@app.route('/scrape', methods=['POST'])
+def scrape():
+    data = request.get_json()
+    url = data.get('url', None)
+    if not url:
+        return jsonify({'error': 'No URL provided'}), 400
 
-  await autoScroll(page);
+    chrome_service = ChromeService(executable_path=CHROMEDRIVER)
+    driver = webdriver.Chrome(service=chrome_service, options=options)
+    
+    driver.get(url)
+    
+    # Scroll to the bottom of the page
+    driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+    
+    # Wait for the page to load
+    WebDriverWait(driver, 10).until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
-  const html = await page.content();
-  res.send(html);
+    html = driver.page_source
+    driver.quit()
 
-  await browser.close();
-});
+    return jsonify({'html': html})
 
-async function autoScroll(page) {
-  await page.evaluate(async () => {
-    await new Promise((resolve, reject) => {
-      let totalHeight = 0;
-      const distance = 100;
-      const timer = setInterval(() => {
-        const scrollHeight = document.body.scrollHeight;
-        window.scrollBy(0, distance);
-        totalHeight += distance;
-
-        if (totalHeight >= scrollHeight) {
-          clearInterval(timer);
-          resolve();
-        }
-      }, 100);
-    });
-  });
-}
-
-app.listen(process.env.PORT || 3000, () => {
-  console.log('Server is running');
-});
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=5000)
