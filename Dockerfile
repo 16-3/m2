@@ -1,27 +1,22 @@
-# Stage 1: Build the Go app
-FROM golang:1.16 as builder
+# Start from golang base image
+FROM golang:1.20 as builder
 
+# Set the Current Working Directory inside the container
 WORKDIR /app
 
-# Copy go mod and sum files
-COPY go.mod go.sum ./
-
-# Download all dependencies
-RUN go mod download
-
-# Copy the source from the current directory to the working directory inside the container
+# Copy everything from the current directory to the PWD(Present Working Directory) inside the container
 COPY . .
 
-# Build the Go app
+# Download all dependencies. 
+RUN go mod download
+
+# Install the package
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 
-# Stage 2: Run the Go app
-FROM alpine:latest
+######## Start a new stage from scratch #######
+FROM alpine:latest  
 
 RUN apk --no-cache add ca-certificates
-
-# Install Chrome
-RUN apk add --no-cache chromium
 
 WORKDIR /root/
 
@@ -31,5 +26,5 @@ COPY --from=builder /app/main .
 # Expose port 8080 to the outside world
 EXPOSE 8080
 
-# Run the executable
+#Command to run the executable
 CMD ["./main"]
