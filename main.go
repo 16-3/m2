@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/chromedp/cdproto/page"
 	"github.com/chromedp/chromedp"
 )
 
@@ -54,7 +53,6 @@ func main() {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
 		strings.NewReader(html).WriteTo(w)
 	})
@@ -86,11 +84,11 @@ func main() {
 		ctx, cancel := chromedp.NewContext(context.Background())
 		defer cancel()
 
-		var screenshot []byte
+		var buf []byte
 		err = chromedp.Run(ctx,
 			chromedp.Navigate(postData.URL),
 			chromedp.ScrollIntoView(`document.body`, chromedp.ByJSPath),
-			chromedp.CaptureScreenshot(&screenshot),
+			chromedp.CaptureScreenshot(&buf),
 		)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -98,8 +96,9 @@ func main() {
 		}
 
 		w.Header().Set("Content-Type", "image/png")
-		w.Write(screenshot)
+		w.Write(buf)
 	})
 
 	log.Fatal(http.ListenAndServe(":8080", nil))
 }
+
