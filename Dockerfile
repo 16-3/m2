@@ -1,42 +1,35 @@
-##### building stage #####
-FROM python:3.10 as builder
-
-RUN apt-get update && apt-get install -y \
-    unzip 
-
-# chrome driver
-ADD https://chromedriver.storage.googleapis.com/101.0.4951.41/chromedriver_linux64.zip /opt/chrome/
-RUN cd /opt/chrome/ && \
-    unzip chromedriver_linux64.zip && \
-    rm -f chromedriver_linux64.zip
-
-# python package
-RUN pip install --upgrade pip
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r  requirements.txt
-
-
-##### production stage #####
-FROM python:3.10-slim
-COPY --from=builder /opt/ /opt/
-COPY --from=builder /usr/local/lib/python3.10/site-packages /usr/local/lib/python3.10/site-packages
-
-RUN apt-get update && apt-get install -y \
-    wget \
-    curl \
-    gnupg
-
-# chrome
-RUN wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | apt-key add && \
-    echo 'deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main' | tee /etc/apt/sources.list.d/google-chrome.list && \
-    apt-get update && \
-    apt-get install -y google-chrome-stable && \
-    apt-get -y clean && \
-    rm -rf /var/lib/apt/lists/*
+# Stage 1: Build the Go app
+FROM golang:1.16 as builder
 
 WORKDIR /app
-COPY app.py .
 
-ENV PATH /usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/opt/chrome
+# Copy go mod and sum files
+COPY go.mod go.sum ./
 
-CMD ["python", "app.py"]
+# Download all dependencies
+RUN go mod download
+
+# Copy the source from the current directory to the working directory inside the container
+COPY . .
+
+# Build the Go app
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
+
+# Stage 2: Run the Go app
+FROM alpine:latest
+
+RUN apk --no-cache add ca-certificates
+
+# Install Chrome
+RUN apk add --no-cache chromium
+
+WORKDIR /root/
+
+# Copy the Pre-built binary file from the previous stage
+COPY --from=builder /app/main .
+
+# Expose port 8080 to the outside world
+EXPOSE 8080
+
+# Run the executable
+CMD ["./main"]
